@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VexDB — playground</title>
+<style>
+  :root {
+    --bg: #101312; --panel: #161a19; --line: #2a312f;
+    --ink: #d8ded9; --muted: #7c8781; --accent: #5fd39a; --dim: #3d4742;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    display: flex; min-height: 100vh; justify-content: center;
+  }
+  main { width: min(680px, 92vw); padding: 9vh 0 6vh; }
+  .eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .28em; text-transform: uppercase; }
+  h1 { font-size: 30px; margin: 14px 0 6px; font-weight: 700; letter-spacing: -0.5px; }
+  h1 span { color: var(--accent); }
+  p.sub { color: var(--muted); font-size: 13px; line-height: 1.7; margin: 0 0 30px; }
+  p.sub a { color: var(--ink); }
+  .bar {
+    display: flex; border: 1px solid var(--line); background: var(--panel);
+  }
+  .bar span.prompt { padding: 13px 0 13px 14px; color: var(--accent); }
+  input {
+    flex: 1; background: none; border: none; outline: none; color: var(--ink);
+    font: inherit; font-size: 15px; padding: 13px 12px;
+  }
+  input::placeholder { color: var(--dim); }
+  .meta { margin-top: 10px; font-size: 11px; color: var(--muted); min-height: 16px; }
+  .meta b { color: var(--accent); font-weight: 500; }
+  ol { list-style: none; margin: 22px 0 0; padding: 0; }
+  li {
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid var(--line); padding: 9px 4px; font-size: 15px;
+  }
+  li .rank { color: var(--dim); font-size: 11px; width: 18px; }
+  li .word { flex: 1; }
+  li .gauge { width: 130px; height: 6px; background: var(--dim); border-radius: 3px; overflow: hidden; }
+  li .gauge i { display: block; height: 100%; background: var(--accent); }
+  li .score { color: var(--muted); font-size: 12px; width: 44px; text-align: right; }
+  .hints { margin-top: 26px; font-size: 12px; color: var(--muted); }
+  .hints button {
+    background: none; border: 1px solid var(--line); color: var(--muted);
+    font: inherit; padding: 3px 9px; margin: 0 4px 6px 0; cursor: pointer;
+  }
+  .hints button:hover { border-color: var(--accent); color: var(--accent); }
+  footer { margin-top: 60px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; line-height: 1.8; }
+  footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">▚ vexdb playground</p>
+  <h1>Typo-tolerant search,<br>served by <span>a vector DB built from scratch</span>.</h1>
+  <p class="sub">
+    25,496 English words embedded as character n-gram vectors and indexed with a
+    hand-written <a href="https://github.com/olioli9586/vexdb">HNSW graph in Go</a>.
+    Every keystroke below is a live approximate-nearest-neighbor query — note the
+    microsecond latencies.
+  </p>
+
+  <div class="bar">
+    <span class="prompt">/</span>
+    <input id="q" placeholder="type a word (typos welcome)…" autocomplete="off" autofocus>
+  </div>
+  <div class="meta" id="meta"></div>
+  <ol id="results"></ol>
+
+  <div class="hints" id="hints">
+    try:
+    <button>algoritm</button><button>databse</button><button>seach</button>
+    <button>engneer</button><button>vektor</button>
+  </div>
+
+  <footer>
+    The interesting part is the index, not the embedding: n-gram vectors make string
+    similarity visible, but the same HNSW graph serves any embedding — swap in a
+    text-embedding model and this becomes semantic search.
+    <a href="https://github.com/olioli9586/vexdb">source ↗</a>
+  </footer>
+</main>
+
+<script>
+  const q = document.getElementById("q");
+  const meta = document.getElementById("meta");
+  const results = document.getElementById("results");
+  let timer = null, inflight = null;
+
+  q.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, 120); // debounce keystrokes
+  });
+  document.querySelectorAll(".hints button").forEach((b) =>
+    b.addEventListener("click", () => { q.value = b.textContent; run(); q.focus(); })
+  );
+
+  async function run() {
+    const word = q.value.trim();
+    if (!word) { results.innerHTML = ""; meta.textContent = ""; return; }
+    if (inflight) inflight.abort();
+    inflight = new AbortController();
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(word)}`, { signal: inflight.signal });
+      const data = await res.json();
+      if (data.error) { meta.textContent = data.error; return; }
+      meta.innerHTML = `<b>${data.latency_us}&thinsp;µs</b> index time · ${data.indexed.toLocaleString()} vectors · k=10`;
+      results.innerHTML = data.results.map((r, i) => `
+        <li>
+          <span class="rank">${String(i + 1).padStart(2, "0")}</span>
+          <span class="word">${r.id}</span>
+          <span class="gauge"><i style="width:${Math.max(0, r.score * 100).toFixed(0)}%"></i></span>
+          <span class="score">${r.score.toFixed(2)}</span>
+        </li>`).join("");
+    } catch (e) {
+      if (e.name !== "AbortError") meta.textContent = "request failed — retry";
+    }
+  }
+</script>
+</body>
+</html>

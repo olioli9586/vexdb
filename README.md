@@ -6,6 +6,11 @@ ground truth, a write-ahead log for durability, and an HTTP API. Built to
 understand — and be able to explain — what sits under every RAG stack's
 `.query()` call.
 
+**Live playground:** https://vexdb.vercel.app — typo-tolerant word search over
+25K character-n-gram vectors, every keystroke an HNSW query (µs latencies shown).
+
+![playground](docs/playground.png)
+
 ## Benchmarks
 
 20,000 vectors × 128 dims, k=10, Apple M-series (`go run ./cmd/bench`):
@@ -87,9 +92,10 @@ fails CI rather than silently degrading search quality.
 
 ## Roadmap
 
-- [ ] Snapshot + WAL compaction (bound replay time)
+- [x] Snapshot serialization (`index/snapshot.go`) — used by the hosted playground for ~100ms cold starts
+- [ ] WAL compaction into snapshots (bound replay time)
 - [ ] Delete/update via tombstones
 - [ ] Metadata filtering
 - [ ] SIMD dot product (gonum/asm or hand-rolled NEON)
 - [ ] Fine-grained locking (currently one RWMutex around the graph)
-- [ ] Search playground UI + hosted demo
+- [x] Search playground UI + hosted demo (https://vexdb.vercel.app)

@@ -1,2 +1,4 @@
 vexdb.wal
 *.bin
+.vercel
+.env*
