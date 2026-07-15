@@ -3,86 +3,317 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VexDB — playground</title>
+<title>VexDB playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,600..900&family=Instrument+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #101312; --panel: #161a19; --line: #2a312f;
-    --ink: #d8ded9; --muted: #7c8781; --accent: #5fd39a; --dim: #3d4742;
+    --paper: #EDF1E9;      /* map sheet */
+    --card: #FAFCF7;
+    --ink: #1C2A23;        /* pine */
+    --body: #33443B;
+    --muted: #5A6A60;
+    --line: #D3DBCC;
+    --route: #C2481A;      /* road orange */
+    --route-bright: #D9531F;
+    --water: #2E5F8A;      /* links */
+    --dot: rgba(28, 42, 35, 0.14);
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
+  html, body { margin: 0; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: "SF Mono", ui-monospace, Menlo, monospace;
-    display: flex; min-height: 100vh; justify-content: center;
+    background-color: var(--paper);
+    background-image: radial-gradient(var(--dot) 1px, transparent 1.4px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: "Instrument Sans", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
   }
-  main { width: min(680px, 92vw); padding: 9vh 0 6vh; }
-  .eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .28em; text-transform: uppercase; }
-  h1 { font-size: 30px; margin: 14px 0 6px; font-weight: 700; letter-spacing: -0.5px; }
-  h1 span { color: var(--accent); }
-  p.sub { color: var(--muted); font-size: 13px; line-height: 1.7; margin: 0 0 30px; }
-  p.sub a { color: var(--ink); }
+  a { color: var(--water); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--route); }
+  :focus-visible { outline: 2px solid var(--route); outline-offset: 2px; border-radius: 4px; }
+  ::selection { background: var(--route); color: var(--card); }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 26px clamp(20px, 4vw, 48px) 72px; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .wordmark { display: flex; align-items: center; gap: 10px; }
+  .wordmark strong {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-variation-settings: "wdth" 125;
+    font-weight: 800; font-size: 19px; letter-spacing: 0.01em;
+  }
+  .wordmark .tag {
+    font-family: "Spline Sans Mono", ui-monospace, monospace;
+    font-size: 11.5px; color: var(--muted);
+    border: 1px solid var(--line); background: var(--card);
+    border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+  }
+  header .src { font-size: 14px; font-weight: 500; white-space: nowrap; }
+
+  /* ---------- layout ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(300px, 5fr) 6fr;
+    grid-template-areas: "intro console" "legend console";
+    grid-template-rows: auto 1fr;
+    column-gap: clamp(36px, 6vw, 84px);
+    margin-top: clamp(36px, 7vh, 76px);
+    align-items: start;
+  }
+  .intro { grid-area: intro; }
+  .console { grid-area: console; }
+  .legend { grid-area: legend; }
+
+  /* ---------- intro ---------- */
+  h1 {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-variation-settings: "wdth" 125;
+    font-weight: 800;
+    font-size: clamp(32px, 4.2vw, 46px);
+    line-height: 1.04; letter-spacing: -0.01em;
+    margin: 0 0 18px; text-wrap: balance;
+  }
+  .lede { color: var(--body); font-size: 15.5px; line-height: 1.65; margin: 0; max-width: 42ch; }
+
+  /* ---------- legend ---------- */
+  .legend {
+    margin-top: 32px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 6px;
+  }
+  .legend h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; color: var(--muted); }
+  .legend dl { margin: 0; }
+  .legend .row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 0; border-top: 1px solid var(--line);
+  }
+  .legend .row:first-of-type { border-top: 0; }
+  .legend svg { flex: none; }
+  .legend dt { font-size: 13.5px; font-weight: 600; width: 84px; flex: none; }
+  .legend dd {
+    margin: 0; font-family: "Spline Sans Mono", ui-monospace, monospace;
+    font-size: 12.5px; color: var(--muted);
+  }
+
+  /* ---------- console ---------- */
+  .console {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: clamp(18px, 2.6vw, 26px);
+    box-shadow: 0 1px 2px rgba(28, 42, 35, 0.05), 0 12px 32px rgba(28, 42, 35, 0.07);
+  }
   .bar {
-    display: flex; border: 1px solid var(--line); background: var(--panel);
+    display: flex; align-items: center; gap: 10px;
+    border: 1.5px solid var(--line); border-radius: 10px;
+    background: var(--paper); padding: 0 14px;
+    transition: border-color 0.15s ease;
   }
-  .bar span.prompt { padding: 13px 0 13px 14px; color: var(--accent); }
+  .bar:focus-within { border-color: var(--route); }
+  .bar svg { flex: none; }
   input {
-    flex: 1; background: none; border: none; outline: none; color: var(--ink);
-    font: inherit; font-size: 15px; padding: 13px 12px;
+    flex: 1; min-width: 0; background: none; border: none; outline: none;
+    color: var(--ink); font: inherit; font-size: 17px; padding: 13px 0;
   }
-  input::placeholder { color: var(--dim); }
-  .meta { margin-top: 10px; font-size: 11px; color: var(--muted); min-height: 16px; }
-  .meta b { color: var(--accent); font-weight: 500; }
-  ol { list-style: none; margin: 22px 0 0; padding: 0; }
-  li {
-    display: flex; align-items: center; gap: 14px;
-    border-bottom: 1px solid var(--line); padding: 9px 4px; font-size: 15px;
-  }
-  li .rank { color: var(--dim); font-size: 11px; width: 18px; }
-  li .word { flex: 1; }
-  li .gauge { width: 130px; height: 6px; background: var(--dim); border-radius: 3px; overflow: hidden; }
-  li .gauge i { display: block; height: 100%; background: var(--accent); }
-  li .score { color: var(--muted); font-size: 12px; width: 44px; text-align: right; }
-  .hints { margin-top: 26px; font-size: 12px; color: var(--muted); }
+  input::placeholder { color: var(--muted); opacity: 0.75; }
+
+  .hints { margin-top: 14px; font-size: 13px; color: var(--muted); }
   .hints button {
-    background: none; border: 1px solid var(--line); color: var(--muted);
-    font: inherit; padding: 3px 9px; margin: 0 4px 6px 0; cursor: pointer;
+    background: var(--paper); border: 1px solid var(--line); color: var(--body);
+    font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 12.5px;
+    padding: 4px 12px; margin: 0 6px 6px 0; cursor: pointer; border-radius: 999px;
+    transition: border-color 0.15s ease, color 0.15s ease;
   }
-  .hints button:hover { border-color: var(--accent); color: var(--accent); }
-  footer { margin-top: 60px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; line-height: 1.8; }
-  footer a { color: var(--ink); }
+  .hints button:hover { border-color: var(--route); color: var(--route); }
+
+  .meta {
+    margin-top: 18px; min-height: 18px;
+    font-family: "Spline Sans Mono", ui-monospace, monospace;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .meta b { color: var(--route); font-weight: 500; }
+
+  /* ---------- results: stops on a route ---------- */
+  ol.route { list-style: none; margin: 10px 0 0; padding: 0; position: relative; }
+  ol.route::before {
+    content: ""; position: absolute; left: 4px; top: 26px; bottom: 26px;
+    width: 2px; border-radius: 1px;
+    background: color-mix(in srgb, var(--route) 30%, var(--paper));
+  }
+  ol.route li {
+    display: flex; align-items: center; gap: 13px;
+    padding: 11px 0; font-size: 15.5px; position: relative;
+    animation: arrive 0.3s ease both;
+  }
+  ol.route li:nth-child(2)  { animation-delay: 0.02s; }
+  ol.route li:nth-child(3)  { animation-delay: 0.04s; }
+  ol.route li:nth-child(4)  { animation-delay: 0.06s; }
+  ol.route li:nth-child(5)  { animation-delay: 0.08s; }
+  ol.route li:nth-child(6)  { animation-delay: 0.10s; }
+  ol.route li:nth-child(7)  { animation-delay: 0.12s; }
+  ol.route li:nth-child(8)  { animation-delay: 0.14s; }
+  ol.route li:nth-child(9)  { animation-delay: 0.16s; }
+  ol.route li:nth-child(10) { animation-delay: 0.18s; }
+  @keyframes arrive {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .stop {
+    flex: none; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--route);
+  }
+  ol.route li:first-child .stop {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--route) 25%, var(--card));
+  }
+  ol.route .rank {
+    font-family: "Spline Sans Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--muted); width: 20px; flex: none;
+  }
+  ol.route .word { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+  ol.route li:first-child .word { font-weight: 600; }
+  .gauge {
+    flex: none; width: 120px; height: 6px; border-radius: 3px; overflow: hidden;
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+  }
+  .gauge i { display: block; height: 100%; background: var(--route-bright); border-radius: 3px; }
+  ol.route .score {
+    font-family: "Spline Sans Mono", ui-monospace, monospace;
+    font-size: 12px; color: var(--muted); width: 44px; text-align: right; flex: none;
+  }
+
+  /* ---------- empty state ---------- */
+  .empty { display: none; }
+  #results:empty + .empty { display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+  .empty .ghost { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+  .empty .ghost i {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px dashed color-mix(in srgb, var(--route) 55%, var(--paper));
+  }
+  .empty .ghost em { width: 2px; height: 14px; background: var(--line); border-radius: 1px; }
+  .empty p { margin: 0; font-size: 14px; color: var(--muted); max-width: 40ch; line-height: 1.6; }
+
+  /* ---------- footer ---------- */
+  footer { margin-top: 64px; max-width: 60ch; font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  footer strong { color: var(--body); font-weight: 600; }
+
+  @media (max-width: 880px) {
+    .grid {
+      grid-template-columns: 1fr;
+      grid-template-areas: "intro" "console" "legend";
+      row-gap: 28px; margin-top: 30px;
+    }
+    .legend { margin-top: 0; }
+    .lede { max-width: none; }
+    footer { margin-top: 44px; }
+  }
+  @media (max-width: 480px) {
+    .gauge { width: 56px; }
+    header .src { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <p class="eyebrow">▚ vexdb playground</p>
-  <h1>Typo-tolerant search,<br>served by <span>a vector DB built from scratch</span>.</h1>
-  <p class="sub">
-    25,496 English words embedded as character n-gram vectors and indexed with a
-    hand-written <a href="https://github.com/olioli9586/vexdb">HNSW graph in Go</a>.
-    Every keystroke below is a live approximate-nearest-neighbor query — note the
-    microsecond latencies.
-  </p>
+<div class="sheet">
+  <header>
+    <div class="wordmark">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <path d="M4 21 L11 10 L17 14 L22 5" fill="none" stroke="#C2481A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="4" cy="21" r="3" fill="#1C2A23"/>
+        <circle cx="11" cy="10" r="2.4" fill="#1C2A23"/>
+        <circle cx="17" cy="14" r="2.4" fill="#1C2A23"/>
+        <circle cx="22" cy="5" r="3.2" fill="#C2481A"/>
+      </svg>
+      <strong>VexDB</strong>
+      <span class="tag">live demo</span>
+    </div>
+    <a class="src" href="https://github.com/olioli9586/vexdb">Source on GitHub</a>
+  </header>
 
-  <div class="bar">
-    <span class="prompt">/</span>
-    <input id="q" placeholder="type a word (typos welcome)…" autocomplete="off" autofocus>
-  </div>
-  <div class="meta" id="meta"></div>
-  <ol id="results"></ol>
+  <div class="grid">
+    <section class="intro">
+      <h1>Find the word you meant to type.</h1>
+      <p class="lede">
+        VexDB indexes 25,496 English words as 128-dimension character-trigram
+        vectors. Every keystroke searches all of them through a
+        <a href="https://github.com/olioli9586/vexdb">hand-written HNSW graph in Go</a>
+        and returns the ten nearest — the timer below shows each search in microseconds.
+      </p>
+    </section>
 
-  <div class="hints" id="hints">
-    try:
-    <button>algoritm</button><button>databse</button><button>seach</button>
-    <button>engneer</button><button>vektor</button>
+    <section class="console" aria-label="Search demo">
+      <label class="sr-only" for="q">Search for a word</label>
+      <div class="bar">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="5" fill="none" stroke="#C2481A" stroke-width="2.4"/>
+        </svg>
+        <input id="q" placeholder="Type a word, typos and all" autocomplete="off" autofocus>
+      </div>
+
+      <div class="hints" id="hints">
+        Try a misspelling:
+        <button>algoritm</button><button>databse</button><button>seach</button>
+        <button>engneer</button><button>vektor</button>
+      </div>
+
+      <div class="meta" id="meta" role="status" aria-live="polite"></div>
+      <ol class="route" id="results"></ol><div class="empty">
+        <span class="ghost" aria-hidden="true"><i></i><em></em><i></i><em></em><i></i></span>
+        <p>The ten nearest words appear here as you type, closest first. Not sure where to start? Pick a misspelling above.</p>
+      </div>
+    </section>
+
+    <aside class="legend" aria-label="How it's built">
+      <h2>How it's built</h2>
+      <dl>
+        <div class="row">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.6" fill="#5A6A60"/><circle cx="12" cy="5" r="1.6" fill="#5A6A60"/>
+            <circle cx="13" cy="12" r="1.6" fill="#5A6A60"/><circle cx="7" cy="6" r="1.6" fill="#5A6A60"/>
+          </svg>
+          <dt>Corpus</dt><dd>25,496 English words</dd>
+        </div>
+        <div class="row">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M4 14 L13 5" stroke="#5A6A60" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M9 4.5 L13.5 4.5 L13.5 9" fill="none" stroke="#5A6A60" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <dt>Embedding</dt><dd>char bi/trigrams, 128 dims</dd>
+        </div>
+        <div class="row">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M3 14 L8 7 L12 10 L15 4" fill="none" stroke="#C2481A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="3" cy="14" r="2" fill="#1C2A23"/><circle cx="15" cy="4" r="2" fill="#C2481A"/>
+          </svg>
+          <dt>Index</dt><dd>HNSW graph, Go stdlib only</dd>
+        </div>
+        <div class="row">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <rect x="3" y="8" width="12" height="3" rx="1.5" fill="#D3DBCC"/>
+            <rect x="3" y="8" width="8" height="3" rx="1.5" fill="#D9531F"/>
+          </svg>
+          <dt>Similarity</dt><dd>cosine, top 10 returned</dd>
+        </div>
+      </dl>
+    </aside>
   </div>
 
   <footer>
-    The interesting part is the index, not the embedding: n-gram vectors make string
-    similarity visible, but the same HNSW graph serves any embedding — swap in a
-    text-embedding model and this becomes semantic search.
-    <a href="https://github.com/olioli9586/vexdb">source ↗</a>
+    <strong>About this demo.</strong> The trigram embedding is here to make string
+    similarity visible without an ML model — the index underneath doesn't care
+    where vectors come from. Swap in a text-embedding model and the same graph
+    serves semantic search. <a href="https://github.com/olioli9586/vexdb">Read the source on GitHub</a>.
   </footer>
-</main>
+</div>
 
 <script>
   const q = document.getElementById("q");
@@ -107,16 +338,17 @@
       const res = await fetch(`/api/search?q=${encodeURIComponent(word)}`, { signal: inflight.signal });
       const data = await res.json();
       if (data.error) { meta.textContent = data.error; return; }
-      meta.innerHTML = `<b>${data.latency_us}&thinsp;µs</b> index time · ${data.indexed.toLocaleString()} vectors · k=10`;
+      meta.innerHTML = `<b>${data.latency_us}&thinsp;µs</b> search · ${data.indexed.toLocaleString()} vectors · 10 nearest`;
       results.innerHTML = data.results.map((r, i) => `
         <li>
+          <span class="stop" aria-hidden="true"></span>
           <span class="rank">${String(i + 1).padStart(2, "0")}</span>
           <span class="word">${r.id}</span>
           <span class="gauge"><i style="width:${Math.max(0, r.score * 100).toFixed(0)}%"></i></span>
           <span class="score">${r.score.toFixed(2)}</span>
         </li>`).join("");
     } catch (e) {
-      if (e.name !== "AbortError") meta.textContent = "request failed — retry";
+      if (e.name !== "AbortError") meta.textContent = "Search request failed. Check your connection and keep typing to retry.";
     }
   }
 </script>
