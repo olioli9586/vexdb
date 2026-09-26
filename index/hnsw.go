@@ -278,16 +278,16 @@ type searchItem struct {
 
 type minHeap []searchItem
 
-func (p minHeap) Len() int            { return len(p) }
-func (p minHeap) Less(i, j int) bool  { return p[i].dist < p[j].dist }
-func (p minHeap) Swap(i, j int)       { p[i], p[j] = p[j], p[i] }
-func (p *minHeap) Push(x any)         { *p = append(*p, x.(searchItem)) }
-func (p *minHeap) Pop() any           { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
+func (p minHeap) Len() int           { return len(p) }
+func (p minHeap) Less(i, j int) bool { return p[i].dist < p[j].dist }
+func (p minHeap) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p *minHeap) Push(x any)        { *p = append(*p, x.(searchItem)) }
+func (p *minHeap) Pop() any          { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
 
 type maxHeap []searchItem
 
-func (p maxHeap) Len() int            { return len(p) }
-func (p maxHeap) Less(i, j int) bool  { return p[i].dist > p[j].dist }
-func (p maxHeap) Swap(i, j int)       { p[i], p[j] = p[j], p[i] }
-func (p *maxHeap) Push(x any)         { *p = append(*p, x.(searchItem)) }
-func (p *maxHeap) Pop() any           { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
+func (p maxHeap) Len() int           { return len(p) }
+func (p maxHeap) Less(i, j int) bool { return p[i].dist > p[j].dist }
+func (p maxHeap) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p *maxHeap) Push(x any)        { *p = append(*p, x.(searchItem)) }
+func (p *maxHeap) Pop() any          { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
