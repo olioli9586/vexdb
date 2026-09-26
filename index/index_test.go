@@ -112,6 +112,45 @@ func randVec(rng *rand.Rand, dims int) []float32 {
 	return v
 }
 
+// A rejected first insert must not pin the index's dimensionality: nothing
+// was stored, so the next valid vector of any length should be accepted.
+func TestRejectedFirstVectorDoesNotFixDims(t *testing.T) {
+	for _, idx := range []Index{NewFlat(), NewHNSW(16, 200, 64)} {
+		if err := idx.Add("zero", []float32{0, 0, 0}); err != ErrZeroVector {
+			t.Fatalf("%T: want ErrZeroVector, got %v", idx, err)
+		}
+		if err := idx.Add("nan", []float32{float32(math.NaN()), 1, 2, 3}); err != ErrNonFinite {
+			t.Fatalf("%T: want ErrNonFinite, got %v", idx, err)
+		}
+		mustAdd(t, idx, "a", []float32{1, 2})
+		got, err := idx.Search([]float32{1, 2}, 1)
+		if err != nil {
+			t.Fatalf("%T: %v", idx, err)
+		}
+		if len(got) != 1 || got[0].ID != "a" {
+			t.Fatalf("%T: got %v, want [a]", idx, got)
+		}
+	}
+}
+
+// Search with k <= 0 used to panic (negative slice bound in Flat, negative
+// makeslice in HNSW). It should return no results instead.
+func TestSearchNonPositiveK(t *testing.T) {
+	for _, idx := range []Index{NewFlat(), NewHNSW(16, 200, 64)} {
+		mustAdd(t, idx, "a", []float32{1, 0})
+		mustAdd(t, idx, "b", []float32{0, 1})
+		for _, k := range []int{0, -1, -100} {
+			got, err := idx.Search([]float32{1, 0}, k)
+			if err != nil {
+				t.Fatalf("%T k=%d: %v", idx, k, err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("%T k=%d: got %v, want none", idx, k, got)
+			}
+		}
+	}
+}
+
 // Subnormal float32 inputs have a norm whose reciprocal overflows float32.
 // Normalizing in float32 turned [1e-45, 0] into [+Inf, NaN], which then
 // poisoned every score it touched (and broke JSON encoding of results).

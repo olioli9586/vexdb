@@ -29,9 +29,7 @@ func (f *Flat) Add(id string, vec []float32) error {
 	if _, ok := f.byID[id]; ok {
 		return ErrDuplicateID
 	}
-	if f.dims == 0 {
-		f.dims = len(vec)
-	} else if len(vec) != f.dims {
+	if f.dims != 0 && len(vec) != f.dims {
 		return ErrDimMismatch
 	}
 	v := make([]float32, len(vec))
@@ -39,6 +37,9 @@ func (f *Flat) Add(id string, vec []float32) error {
 	if err := Normalize(v); err != nil {
 		return err
 	}
+	// Only an accepted vector fixes the dimensionality; a rejected first
+	// insert must not lock the index to its length.
+	f.dims = len(v)
 	f.ids = append(f.ids, id)
 	f.vecs = append(f.vecs, v)
 	f.byID[id] = struct{}{}
@@ -66,7 +67,7 @@ func (f *Flat) Search(vec []float32, k int) ([]Result, error) {
 	}
 	sort.Slice(results, func(a, b int) bool { return results[a].Score > results[b].Score })
 	if k < len(results) {
-		results = results[:k]
+		results = results[:max(k, 0)]
 	}
 	return results, nil
 }
