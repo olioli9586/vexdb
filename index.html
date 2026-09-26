@@ -331,13 +331,15 @@
 
   async function run() {
     const word = q.value.trim();
-    if (!word) { results.innerHTML = ""; meta.textContent = ""; return; }
+    // Abort any in-flight search too, or its response repopulates the list
+    // after the box has been cleared.
+    if (!word) { if (inflight) inflight.abort(); results.innerHTML = ""; meta.textContent = ""; return; }
     if (inflight) inflight.abort();
     inflight = new AbortController();
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(word)}`, { signal: inflight.signal });
       const data = await res.json();
-      if (data.error) { meta.textContent = data.error; return; }
+      if (data.error) { results.innerHTML = ""; meta.textContent = data.error; return; }
       meta.innerHTML = `<b>${data.latency_us}&thinsp;µs</b> search · ${data.indexed.toLocaleString()} vectors · 10 nearest`;
       results.innerHTML = data.results.map((r, i) => `
         <li>
