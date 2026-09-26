@@ -44,7 +44,13 @@ type hnswNode struct {
 	links [][]uint32 // links[l] = neighbor indices at layer l; len(links) = node's level+1
 }
 
+// minM is the smallest usable M: the level multiplier 1/ln(M) is infinite at
+// M=1 (every node would get an unbounded level) and meaningless below it.
+const minM = 2
+
+// NewHNSW returns an empty index. m below 2 is raised to 2.
 func NewHNSW(m, efConstruction, efSearch int) *HNSW {
+	m = max(m, minM)
 	return &HNSW{
 		M:              m,
 		EfConstruction: efConstruction,
@@ -59,7 +65,13 @@ func NewHNSW(m, efConstruction, efSearch int) *HNSW {
 // randomLevel draws from a geometric-like distribution: most nodes live only
 // on layer 0; each higher layer holds ~1/M of the one below.
 func (h *HNSW) randomLevel() int {
-	return int(math.Floor(-math.Log(h.rng.Float64()) * h.mL))
+	u := h.rng.Float64() // in [0, 1)
+	if u == 0 {
+		// -ln(0) = +Inf, and converting +Inf to int is undefined (in
+		// practice a huge or negative level and a makeslice panic).
+		u = math.SmallestNonzeroFloat64
+	}
+	return int(math.Floor(-math.Log(u) * h.mL))
 }
 
 func (h *HNSW) maxLinks(level int) int {
@@ -78,9 +90,7 @@ func (h *HNSW) Add(id string, vec []float32) error {
 	if _, ok := h.byID[id]; ok {
 		return ErrDuplicateID
 	}
-	if h.dims == 0 {
-		h.dims = len(vec)
-	} else if len(vec) != h.dims {
+	if h.dims != 0 && len(vec) != h.dims {
 		return ErrDimMismatch
 	}
 	v := make([]float32, len(vec))
@@ -88,6 +98,9 @@ func (h *HNSW) Add(id string, vec []float32) error {
 	if err := Normalize(v); err != nil {
 		return err
 	}
+	// Only an accepted vector fixes the dimensionality; a rejected first
+	// insert must not lock the index to its length.
+	h.dims = len(v)
 
 	level := h.randomLevel()
 	node := &hnswNode{id: id, vec: v, links: make([][]uint32, level+1)}
@@ -206,7 +219,7 @@ func (h *HNSW) Search(vec []float32, k int) ([]Result, error) {
 	ef := max(h.EfSearch, k)
 	cands := h.searchLayer(q, ep, ef, 0)
 
-	n := min(k, len(cands))
+	n := max(min(k, len(cands)), 0)
 	results := make([]Result, n)
 	for i := 0; i < n; i++ {
 		results[i] = Result{ID: h.nodes[cands[i].idx].id, Score: 1 - cands[i].dist}
@@ -278,16 +291,16 @@ type searchItem struct {
 
 type minHeap []searchItem
 
-func (p minHeap) Len() int            { return len(p) }
-func (p minHeap) Less(i, j int) bool  { return p[i].dist < p[j].dist }
-func (p minHeap) Swap(i, j int)       { p[i], p[j] = p[j], p[i] }
-func (p *minHeap) Push(x any)         { *p = append(*p, x.(searchItem)) }
-func (p *minHeap) Pop() any           { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
+func (p minHeap) Len() int           { return len(p) }
+func (p minHeap) Less(i, j int) bool { return p[i].dist < p[j].dist }
+func (p minHeap) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p *minHeap) Push(x any)        { *p = append(*p, x.(searchItem)) }
+func (p *minHeap) Pop() any          { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
 
 type maxHeap []searchItem
 
-func (p maxHeap) Len() int            { return len(p) }
-func (p maxHeap) Less(i, j int) bool  { return p[i].dist > p[j].dist }
-func (p maxHeap) Swap(i, j int)       { p[i], p[j] = p[j], p[i] }
-func (p *maxHeap) Push(x any)         { *p = append(*p, x.(searchItem)) }
-func (p *maxHeap) Pop() any           { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }
+func (p maxHeap) Len() int           { return len(p) }
+func (p maxHeap) Less(i, j int) bool { return p[i].dist > p[j].dist }
+func (p maxHeap) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p *maxHeap) Push(x any)        { *p = append(*p, x.(searchItem)) }
+func (p *maxHeap) Pop() any          { old := *p; n := len(old); x := old[n-1]; *p = old[:n-1]; return x }

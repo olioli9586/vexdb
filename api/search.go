@@ -8,8 +8,8 @@
 package handler
 
 import (
-	_ "embed"
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"net/http"
 	"strings"

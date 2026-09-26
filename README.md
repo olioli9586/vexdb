@@ -79,6 +79,7 @@ curl localhost:8080/stats
 ```
 
 Vectors are unit-normalized on write; similarity is cosine (higher = better).
+Request bodies are capped at 1 MiB (413 above that).
 
 ## Tests
 

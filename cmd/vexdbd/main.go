@@ -20,6 +20,9 @@ func main() {
 	efc := flag.Int("ef-construction", 200, "HNSW construction beam width")
 	efs := flag.Int("ef-search", 64, "HNSW search beam width")
 	flag.Parse()
+	if *m < 2 || *efc < 1 || *efs < 1 {
+		log.Fatalf("invalid HNSW parameters: need -m >= 2, -ef-construction >= 1, -ef-search >= 1 (got %d, %d, %d)", *m, *efc, *efs)
+	}
 
 	idx := index.NewHNSW(*m, *efc, *efs)
 	skipped := 0
