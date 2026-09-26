@@ -199,3 +199,62 @@ func TestNonFiniteRejected(t *testing.T) {
 		}
 	}
 }
+
+// M < 2 makes the level multiplier 1/ln(M) infinite (M=1) or degenerate
+// (M=0): M=1 panicked on the first inserts and M=0 built a graph with no
+// links. Such values are clamped to the minimum usable M.
+func TestHNSWDegenerateM(t *testing.T) {
+	for _, m := range []int{-1, 0, 1} {
+		h := NewHNSW(m, 50, 16)
+		if h.M < 2 {
+			t.Fatalf("M=%d: not clamped (got %d)", m, h.M)
+		}
+		rng := rand.New(rand.NewSource(5))
+		vecs := make([][]float32, 200)
+		for i := range vecs {
+			vecs[i] = randVec(rng, 8)
+			mustAdd(t, h, fmt.Sprintf("v%d", i), vecs[i])
+		}
+		// M=2 is a sparse graph, so demand a working one rather than a
+		// perfect one: full result lists and most self-lookups found.
+		hits := 0
+		for i, v := range vecs {
+			got, err := h.Search(v, 5)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 5 {
+				t.Fatalf("M=%d: query v%d got %d results, want 5", m, i, len(got))
+			}
+			if got[0].ID == fmt.Sprintf("v%d", i) {
+				hits++
+			}
+		}
+		if hits < 180 {
+			t.Fatalf("M=%d: only %d/200 self-lookups found", m, hits)
+		}
+	}
+}
+
+// zeroSource makes rand.Float64 return exactly 0, the one draw for which
+// -ln(u) is +Inf.
+type zeroSource struct{}
+
+func (zeroSource) Int63() int64 { return 0 }
+func (zeroSource) Seed(int64)   {}
+
+func TestRandomLevelZeroDraw(t *testing.T) {
+	h := NewHNSW(16, 200, 64)
+	h.rng = rand.New(zeroSource{})
+	lvl := h.randomLevel()
+	if lvl < 0 || lvl > 1000 {
+		t.Fatalf("randomLevel with u=0 = %d, want a small non-negative level", lvl)
+	}
+	// And the index must still work when such a node is inserted.
+	mustAdd(t, h, "a", []float32{1, 0})
+	mustAdd(t, h, "b", []float32{0, 1})
+	got, err := h.Search([]float32{0, 1}, 1)
+	if err != nil || len(got) != 1 || got[0].ID != "b" {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}

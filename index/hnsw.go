@@ -44,7 +44,13 @@ type hnswNode struct {
 	links [][]uint32 // links[l] = neighbor indices at layer l; len(links) = node's level+1
 }
 
+// minM is the smallest usable M: the level multiplier 1/ln(M) is infinite at
+// M=1 (every node would get an unbounded level) and meaningless below it.
+const minM = 2
+
+// NewHNSW returns an empty index. m below 2 is raised to 2.
 func NewHNSW(m, efConstruction, efSearch int) *HNSW {
+	m = max(m, minM)
 	return &HNSW{
 		M:              m,
 		EfConstruction: efConstruction,
@@ -59,7 +65,13 @@ func NewHNSW(m, efConstruction, efSearch int) *HNSW {
 // randomLevel draws from a geometric-like distribution: most nodes live only
 // on layer 0; each higher layer holds ~1/M of the one below.
 func (h *HNSW) randomLevel() int {
-	return int(math.Floor(-math.Log(h.rng.Float64()) * h.mL))
+	u := h.rng.Float64() // in [0, 1)
+	if u == 0 {
+		// -ln(0) = +Inf, and converting +Inf to int is undefined (in
+		// practice a huge or negative level and a makeslice panic).
+		u = math.SmallestNonzeroFloat64
+	}
+	return int(math.Floor(-math.Log(u) * h.mL))
 }
 
 func (h *HNSW) maxLinks(level int) int {
