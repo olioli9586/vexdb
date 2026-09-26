@@ -9,11 +9,20 @@ package wal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 )
+
+// maxRecordBytes bounds one encoded record including its newline. Replay's
+// line buffer is this size, and Append refuses anything larger, so every
+// acknowledged record can be replayed.
+const maxRecordBytes = 1 << 24
+
+var ErrRecordTooLarge = errors.New("wal: record exceeds maximum size")
 
 type Record struct {
 	Op     string    `json:"op"` // "add"
@@ -29,11 +38,74 @@ type WAL struct {
 }
 
 func Open(path string) (*WAL, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, err
 	}
+	if err := repairTail(f); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("wal: repairing log tail: %w", err)
+	}
 	return &WAL{f: f, w: bufio.NewWriter(f), path: path}, nil
+}
+
+// repairTail makes the log end on a record boundary before new appends. A
+// crash during Append can leave a final line with no newline. If that line
+// is a complete record it is kept (Replay applies it too) and terminated;
+// otherwise it is a torn write, never acknowledged, and is truncated. Either
+// way the next record starts on its own line instead of being glued onto
+// the fragment, which would corrupt it.
+func repairTail(f *os.File) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	size := info.Size()
+	if size == 0 {
+		return nil
+	}
+	var last [1]byte
+	if _, err := f.ReadAt(last[:], size-1); err != nil {
+		return err
+	}
+	if last[0] == '\n' {
+		return nil // clean shutdown or completed append: the common case
+	}
+
+	// The unterminated tail starts just past the last newline.
+	start := int64(0)
+	buf := make([]byte, 64<<10)
+	for end := size; end > 0; {
+		off := max(0, end-int64(len(buf)))
+		chunk := buf[:end-off]
+		if _, err := f.ReadAt(chunk, off); err != nil {
+			return err
+		}
+		if i := bytes.LastIndexByte(chunk, '\n'); i >= 0 {
+			start = off + int64(i) + 1
+			break
+		}
+		end = off
+	}
+
+	complete := false
+	if size-start < maxRecordBytes {
+		tail := make([]byte, size-start)
+		if _, err := f.ReadAt(tail, start); err != nil {
+			return err
+		}
+		var rec Record
+		complete = json.Unmarshal(tail, &rec) == nil
+	}
+	if complete {
+		_, err = f.Write([]byte{'\n'})
+	} else {
+		err = f.Truncate(start)
+	}
+	if err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 // Append durably writes one record (flush + fsync) before returning.
@@ -44,6 +116,9 @@ func (w *WAL) Append(rec Record) error {
 	if err != nil {
 		return err
 	}
+	if len(b)+1 > maxRecordBytes {
+		return fmt.Errorf("%w (%d bytes, limit %d)", ErrRecordTooLarge, len(b)+1, maxRecordBytes)
+	}
 	if _, err := w.w.Write(append(b, '\n')); err != nil {
 		return err
 	}
@@ -53,7 +128,9 @@ func (w *WAL) Append(rec Record) error {
 	return w.f.Sync()
 }
 
-// Replay streams every record in the log through fn, in write order.
+// Replay streams every record in the log through fn, in write order. An
+// unparseable final line with no newline is a write torn by a crash and is
+// skipped (Open truncates it); a bad line anywhere else is an error.
 func Replay(path string, fn func(Record) error) (int, error) {
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
@@ -66,10 +143,22 @@ func Replay(path string, fn func(Record) error) (int, error) {
 
 	count := 0
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1<<20), 1<<24) // vectors can make long lines
+	sc.Buffer(make([]byte, 1<<20), maxRecordBytes) // vectors can make long lines
+	unterminated := false
+	sc.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) > 0 && bytes.IndexByte(data, '\n') < 0 {
+			unterminated = true // this is the last line and it has no newline
+		}
+		return bufio.ScanLines(data, atEOF)
+	})
 	for sc.Scan() {
 		var rec Record
 		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil {
+			if unterminated {
+				// Torn by a crash mid-Append. Append returns only after
+				// the newline is synced, so it was never acknowledged.
+				break
+			}
 			return count, fmt.Errorf("wal line %d corrupt: %w", count+1, err)
 		}
 		if err := fn(rec); err != nil {
