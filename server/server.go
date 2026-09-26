@@ -5,6 +5,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -26,8 +27,31 @@ func New(idx index.Index, w *wal.WAL) *Server {
 	return s
 }
 
+// maxBodyBytes caps request bodies. It is far above any real embedding (a
+// 16K-dim vector is ~200 KB of JSON) and keeps every accepted record well
+// inside the WAL's per-record limit.
+const maxBodyBytes = 1 << 20
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	w.Header().Set("Content-Type", "application/json")
 	s.mux.ServeHTTP(w, r)
+}
+
+// decodeBody parses the JSON request body into v. On failure it writes the
+// error response and returns false.
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	err := json.NewDecoder(r.Body).Decode(v)
+	if err == nil {
+		return true
+	}
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		httpError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body exceeds %d bytes", maxBodyBytes))
+	} else {
+		httpError(w, http.StatusBadRequest, "invalid JSON body")
+	}
+	return false
 }
 
 type addRequest struct {
@@ -37,8 +61,7 @@ type addRequest struct {
 
 func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 	var req addRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	// Order matters: validate + apply first, then WAL, then acknowledge.
@@ -69,8 +92,7 @@ type searchRequest struct {
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var req searchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.K <= 0 {
@@ -108,6 +130,7 @@ func statusFor(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, index.ErrDimMismatch),
 		errors.Is(err, index.ErrZeroVector),
+		errors.Is(err, index.ErrNonFinite),
 		errors.Is(err, index.ErrEmptyID):
 		return http.StatusBadRequest
 	default:
