@@ -2,6 +2,7 @@ package index
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 )
@@ -109,4 +110,53 @@ func randVec(rng *rand.Rand, dims int) []float32 {
 		v[i] = float32(rng.NormFloat64())
 	}
 	return v
+}
+
+// Subnormal float32 inputs have a norm whose reciprocal overflows float32.
+// Normalizing in float32 turned [1e-45, 0] into [+Inf, NaN], which then
+// poisoned every score it touched (and broke JSON encoding of results).
+func TestNormalizeSubnormal(t *testing.T) {
+	v := []float32{1e-45, 0}
+	if err := Normalize(v); err != nil {
+		t.Fatal(err)
+	}
+	if v[0] != 1 || v[1] != 0 {
+		t.Fatalf("got %v, want [1 0]", v)
+	}
+
+	for _, idx := range []Index{NewFlat(), NewHNSW(16, 200, 64)} {
+		mustAdd(t, idx, "tiny", []float32{1e-45, 0})
+		mustAdd(t, idx, "north", []float32{0, 1})
+		got, err := idx.Search([]float32{1, 0}, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range got {
+			if math.IsNaN(float64(r.Score)) || math.IsInf(float64(r.Score), 0) {
+				t.Fatalf("%T: non-finite score in %v", idx, got)
+			}
+		}
+		if got[0].ID != "tiny" || got[0].Score < 0.99 {
+			t.Fatalf("%T: got %v, want tiny first with score ~1", idx, got)
+		}
+	}
+}
+
+func TestNonFiniteRejected(t *testing.T) {
+	inf := float32(math.Inf(1))
+	nan := float32(math.NaN())
+	for _, idx := range []Index{NewFlat(), NewHNSW(16, 200, 64)} {
+		for _, v := range [][]float32{{inf, 1}, {1, -inf}, {nan, 1}} {
+			if err := idx.Add("x", v); err != ErrNonFinite {
+				t.Fatalf("%T add %v: want ErrNonFinite, got %v", idx, v, err)
+			}
+		}
+		mustAdd(t, idx, "a", []float32{1, 0})
+		if _, err := idx.Search([]float32{nan, 1}, 1); err != ErrNonFinite {
+			t.Fatalf("%T search: want ErrNonFinite, got %v", idx, err)
+		}
+		if idx.Len() != 1 {
+			t.Fatalf("%T: rejected vectors were stored (len %d)", idx, idx.Len())
+		}
+	}
 }

@@ -28,20 +28,28 @@ var (
 	ErrZeroVector  = errors.New("vector has zero magnitude")
 	ErrDuplicateID = errors.New("id already exists")
 	ErrEmptyID     = errors.New("id must not be empty")
+	ErrNonFinite   = errors.New("vector has NaN or infinite components")
 )
 
 // Normalize scales v to unit length in place.
+//
+// The scale factor stays in float64: for subnormal inputs (e.g. [1e-45, 0])
+// 1/norm overflows float32 to +Inf, which would turn the vector into
+// [+Inf, NaN] and poison every score computed against it.
 func Normalize(v []float32) error {
 	var sum float64
 	for _, x := range v {
 		sum += float64(x) * float64(x)
 	}
+	if math.IsNaN(sum) || math.IsInf(sum, 0) {
+		return ErrNonFinite
+	}
 	if sum == 0 {
 		return ErrZeroVector
 	}
-	inv := float32(1 / math.Sqrt(sum))
+	inv := 1 / math.Sqrt(sum)
 	for i := range v {
-		v[i] *= inv
+		v[i] = float32(float64(v[i]) * inv)
 	}
 	return nil
 }
