@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"testing"
 )
 
@@ -256,5 +257,45 @@ func TestRandomLevelZeroDraw(t *testing.T) {
 	got, err := h.Search([]float32{0, 1}, 1)
 	if err != nil || len(got) != 1 || got[0].ID != "b" {
 		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
+// Concurrent readers and writers must not race (run with -race).
+func TestHNSWConcurrentAddSearch(t *testing.T) {
+	h := NewHNSW(8, 50, 16)
+	rng := rand.New(rand.NewSource(9))
+	mustAdd(t, h, "seed", randVec(rng, 8))
+	queries := make([][]float32, 50)
+	for i := range queries {
+		queries[i] = randVec(rng, 8)
+	}
+	inserts := make([][]float32, 200)
+	for i := range inserts {
+		inserts[i] = randVec(rng, 8)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i, v := range inserts {
+			if err := h.Add(fmt.Sprintf("v%d", i), v); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 400; i++ {
+			if _, err := h.Search(queries[i%len(queries)], 5); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	wg.Wait()
+	if h.Len() != 201 {
+		t.Fatalf("len = %d, want 201", h.Len())
 	}
 }
